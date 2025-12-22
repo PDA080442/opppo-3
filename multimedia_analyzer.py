@@ -291,12 +291,11 @@ def detect_file_type(file_path):
             except (cv2.error, ValueError, AttributeError):
                 pass
         return "audio"
-    elif ext in video_extensions:
+    if ext in video_extensions:
         return "video"
-    elif ext in image_extensions:
+    if ext in image_extensions:
         return "image"
-    else:
-        return "unknown"
+    return "unknown"
 
 
 def main():
