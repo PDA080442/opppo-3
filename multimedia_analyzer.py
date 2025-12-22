@@ -123,7 +123,7 @@ def analyze_audio(file_path):
             print(f"Жанр: {tag.genre}")
 
         # Детальная информация
-        print(f"\n--- Детальная информация ---")
+        print("\n--- Детальная информация ---")
         if tag.channels:
             print(f"Каналы: {tag.channels}")
         if tag.samplerate:
@@ -177,7 +177,7 @@ def analyze_video(file_path):
         print(f"Кодек: {codec}")
 
         # Доп информация
-        print(f"\n--- Дополнительная информация ---")
+        print("\n--- Дополнительная информация ---")
         bitrate = cap.get(cv2.CAP_PROP_BITRATE)
         if bitrate > 0:
             print(f"Битрейт: {bitrate / 1000:.0f} kbps")
@@ -212,7 +212,7 @@ def analyze_image(file_path):
             print(f"Цветовой режим: {mode}")
 
             # Доп информация
-            print(f"\n--- Дополнительная информация ---")
+            print("\n--- Дополнительная информация ---")
             if hasattr(img, "info"):
                 if "dpi" in img.info:
                     dpi = img.info["dpi"]
@@ -311,8 +311,8 @@ def main():
     elif file_type == "image":
         analyze_image(file_path)
     else:
-        print(f"Ошибка: Неизвестный тип файла или формат не поддерживается")
-        print(f"Поддерживаемые форматы:")
+        print("Ошибка: Неизвестный тип файла или формат не поддерживается")
+        print("Поддерживаемые форматы:")
         print("  Аудио: MP3, WAV, FLAC, M4A, AAC, OGG, WMA")
         print("  Видео: MP4, AVI, MKV, MOV, WMV, FLV, WEBM, M4V, MPG, MPEG")
         print("  Изображения: JPG, JPEG, PNG, GIF, BMP, TIFF, WEBP")
@@ -321,4 +321,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
