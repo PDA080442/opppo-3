@@ -71,6 +71,20 @@ def get_file_info(file_path):
     }
 
 
+def _print_audio_tags(tag):
+    """Выводит метаданные аудиофайла"""
+    tags = [
+        ("Название", tag.title),
+        ("Исполнитель", tag.artist),
+        ("Альбом", tag.album),
+        ("Год", tag.year),
+        ("Жанр", tag.genre),
+    ]
+    for label, value in tags:
+        if value:
+            print(f"{label}: {value}")
+
+
 def analyze_audio(file_path):
     """Анализирует аудиофайл"""
     print("\n" + "=" * 60)
@@ -109,25 +123,12 @@ def analyze_audio(file_path):
 
         print(f"\nФормат: {format_name}")
 
-        # Битрейт
         if tag.bitrate:
             print(f"Битрейт: {tag.bitrate} kbps")
-
-        # Длительность
         if tag.duration:
             print(f"Длительность: {format_duration(tag.duration)}")
 
-        # Дополнительные теги
-        if tag.title:
-            print(f"Название: {tag.title}")
-        if tag.artist:
-            print(f"Исполнитель: {tag.artist}")
-        if tag.album:
-            print(f"Альбом: {tag.album}")
-        if tag.year:
-            print(f"Год: {tag.year}")
-        if tag.genre:
-            print(f"Жанр: {tag.genre}")
+        _print_audio_tags(tag)
 
         # Детальная информация
         print("\n--- Детальная информация ---")
