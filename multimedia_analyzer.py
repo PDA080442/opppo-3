@@ -13,7 +13,8 @@ try:
 except ImportError:
     print("Ошибка: библиотека tinytag не установлена.")
     print(
-        "Убедитесь, что виртуальное окружение активировано (source venv/bin/activate)"
+        "Убедитесь, что виртуальное окружение активировано "
+        "(source venv/bin/activate)"
     )
     print("Затем установите: pip install tinytag")
     print(f"Используемый Python: {sys.executable}")
@@ -24,7 +25,8 @@ try:
 except ImportError:
     print("Ошибка: библиотека opencv-python не установлена.")
     print(
-        "Убедитесь, что виртуальное окружение активировано (source venv/bin/activate)"
+        "Убедитесь, что виртуальное окружение активировано "
+        "(source venv/bin/activate)"
     )
     print("Затем установите: pip install opencv-python")
     print(f"Используемый Python: {sys.executable}")
@@ -35,7 +37,8 @@ try:
 except ImportError:
     print("Ошибка: библиотека Pillow не установлена.")
     print(
-        "Убедитесь, что виртуальное окружение активировано (source venv/bin/activate)"
+        "Убедитесь, что виртуальное окружение активировано "
+        "(source venv/bin/activate)"
     )
     print("Затем установите: pip install Pillow")
     print(f"Используемый Python: {sys.executable}")
@@ -62,7 +65,9 @@ def get_file_info(file_path):
     return {
         "name": path.name,
         "size": stat.st_size,
-        "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        "modified": datetime.fromtimestamp(stat.st_mtime).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
     }
 
 
@@ -74,8 +79,10 @@ def analyze_audio(file_path):
 
     file_info = get_file_info(file_path)
     print(f"Название файла: {file_info['name']}")
+    size_mb = file_info['size'] / 1024 / 1024
     print(
-        f"Размер файла: {file_info['size']:,} байт ({file_info['size'] / 1024 / 1024:.2f} МБ)"
+        f"Размер файла: {file_info['size']:,} байт "
+        f"({size_mb:.2f} МБ)"
     )
     print(f"Дата последнего изменения: {file_info['modified']}")
 
@@ -145,8 +152,10 @@ def analyze_video(file_path):
 
     file_info = get_file_info(file_path)
     print(f"Название файла: {file_info['name']}")
+    size_mb = file_info['size'] / 1024 / 1024
     print(
-        f"Размер файла: {file_info['size']:,} байт ({file_info['size'] / 1024 / 1024:.2f} МБ)"
+        f"Размер файла: {file_info['size']:,} байт "
+        f"({size_mb:.2f} МБ)"
     )
     print(f"Дата последнего изменения: {file_info['modified']}")
 
@@ -196,8 +205,10 @@ def analyze_image(file_path):
 
     file_info = get_file_info(file_path)
     print(f"Название файла: {file_info['name']}")
+    size_kb = file_info['size'] / 1024
     print(
-        f"Размер файла: {file_info['size']:,} байт ({file_info['size'] / 1024:.2f} КБ)"
+        f"Размер файла: {file_info['size']:,} байт "
+        f"({size_kb:.2f} КБ)"
     )
     print(f"Дата последнего изменения: {file_info['modified']}")
 
@@ -238,7 +249,9 @@ def detect_file_type(file_path):
     path = Path(file_path)
     ext = path.suffix.lower()
 
-    audio_extensions = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".wma", ".mp4"}
+    audio_extensions = {
+        ".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".wma", ".mp4"
+    }
     video_extensions = {
         ".mp4",
         ".avi",
