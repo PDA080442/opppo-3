@@ -140,7 +140,7 @@ def analyze_audio(file_path):
         if tag.filesize:
             print(f"Размер файла (из метаданных): {tag.filesize:,} байт")
 
-    except Exception as e:
+    except (IOError, OSError, ValueError, AttributeError) as e:
         print(f"\nОшибка при анализе аудиофайла: {e}")
 
 
@@ -193,7 +193,7 @@ def analyze_video(file_path):
 
         cap.release()
 
-    except Exception as e:
+    except (cv2.error, IOError, OSError, ValueError) as e:
         print(f"\nОшибка при анализе видеофайла: {e}")
 
 
@@ -240,7 +240,7 @@ def analyze_image(file_path):
                 channels = len(mode)
                 print(f"Количество каналов: {channels}")
 
-    except Exception as e:
+    except (IOError, OSError, ValueError, AttributeError) as e:
         print(f"\nОшибка при анализе изображения: {e}")
 
 
@@ -288,7 +288,7 @@ def detect_file_type(file_path):
                     cap.release()
                     if width > 0 and height > 0:
                         return "video"
-            except:
+            except (cv2.error, ValueError, AttributeError):
                 pass
         return "audio"
     elif ext in video_extensions:
