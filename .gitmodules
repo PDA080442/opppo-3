@@ -1,0 +1,3 @@
+[submodule "tests"]
+	path = tests
+	url = https://github.com/PDA080442/multimedia-analyzer-tests.git
