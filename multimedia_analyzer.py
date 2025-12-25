@@ -1,21 +1,25 @@
 """
 Практическая работа 1. Вариант 12
 Анализатор мультимедийных файлов
+
+Программа обрабатывает файл с командами:
+- ADD <путь_к_файлу> - добавляет мультимедийный файл в контейнер
+- REM <условие> - удаляет файлы по условию
+- PRINT - выводит содержимое контейнера
 """
 
 import os
 import sys
+import re
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
 try:
     from tinytag import TinyTag
 except ImportError:
     print("Ошибка: библиотека tinytag не установлена.")
-    print(
-        "Убедитесь, что виртуальное окружение активировано "
-        "(source venv/bin/activate)"
-    )
+    print("venv не активировано (source venv/bin/activate)")
     print("Затем установите: pip install tinytag")
     print(f"Используемый Python: {sys.executable}")
     sys.exit(1)
@@ -24,10 +28,7 @@ try:
     import cv2
 except ImportError:
     print("Ошибка: библиотека opencv-python не установлена.")
-    print(
-        "Убедитесь, что виртуальное окружение активировано "
-        "(source venv/bin/activate)"
-    )
+    print("venv не активировано (source venv/bin/activate)")
     print("Затем установите: pip install opencv-python")
     print(f"Используемый Python: {sys.executable}")
     sys.exit(1)
@@ -36,300 +37,379 @@ try:
     from PIL import Image
 except ImportError:
     print("Ошибка: библиотека Pillow не установлена.")
-    print(
-        "Убедитесь, что виртуальное окружение активировано "
-        "(source venv/bin/activate)"
-    )
+    print("venv не активировано (source venv/bin/activate)")
     print("Затем установите: pip install Pillow")
     print(f"Используемый Python: {sys.executable}")
     sys.exit(1)
 
 
-def format_duration(seconds):
-    """Форматирует длительность в читаемый вид"""
-    if seconds is None:
-        return "Неизвестно"
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    if hours > 0:
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-    return f"{minutes:02d}:{secs:02d}"
+class MultimediaFile:
+    """Базовый класс для мультимедийных файлов"""
+
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+        self.path = Path(file_path)
+        if not self.path.exists():
+            raise FileNotFoundError(f"Файл не найден: {file_path}")
+        
+        stat = self.path.stat()
+        self.name = self.path.name
+        self.size = stat.st_size
+        self.modified = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        self.file_type = self._detect_type()
+
+    def _detect_type(self) -> str:
+        """Определяет тип файла"""
+        ext = self.path.suffix.lower()
+        audio_ext = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".wma"}
+        video_ext = {".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg"}
+        image_ext = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif", ".webp"}
+        
+        if ext in audio_ext:
+            return "audio"
+        elif ext in video_ext:
+            return "video"
+        elif ext in image_ext:
+            return "image"
+        else:
+            return "unknown"
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.file_type})"
+
+    def __repr__(self) -> str:
+        return f"MultimediaFile('{self.file_path}')"
 
 
-def get_file_info(file_path):
-    """Получает базовую информацию о файле"""
-    path = Path(file_path)
-    stat = path.stat()
+class AudioFile(MultimediaFile):
+    """Класс для аудиофайлов"""
 
-    return {
-        "name": path.name,
-        "size": stat.st_size,
-        "modified": datetime.fromtimestamp(stat.st_mtime).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
-    }
+    def __init__(self, file_path: str):
+        super().__init__(file_path)
+        if self.file_type != "audio":
+            raise ValueError(f"Файл {file_path} не является аудиофайлом")
+        
+        self._load_metadata()
 
+    def _load_metadata(self):
+        """Загружает метаданные аудиофайла"""
+        try:
+            tag = TinyTag.get(self.file_path)
+            self.bitrate = tag.bitrate if tag.bitrate else None
+            self.duration = tag.duration if tag.duration else None
+            self.channels = tag.channels if tag.channels else None
+            self.samplerate = tag.samplerate if tag.samplerate else None
+            self.title = tag.title if tag.title else None
+            self.artist = tag.artist if tag.artist else None
+        except Exception as e:
+            self.bitrate = None
+            self.duration = None
+            self.channels = None
+            self.samplerate = None
+            self.title = None
+            self.artist = None
 
-def _print_audio_tags(tag):
-    """Выводит метаданные аудиофайла"""
-    tags = [
-        ("Название", tag.title),
-        ("Исполнитель", tag.artist),
-        ("Альбом", tag.album),
-        ("Год", tag.year),
-        ("Жанр", tag.genre),
-    ]
-    for label, value in tags:
-        if value:
-            print(f"{label}: {value}")
-
-
-def analyze_audio(file_path):
-    """Анализирует аудиофайл"""
-    print("\n" + "=" * 60)
-    print("АНАЛИЗ АУДИОФАЙЛА")
-    print("=" * 60)
-
-    file_info = get_file_info(file_path)
-    print(f"Название файла: {file_info['name']}")
-    size_mb = file_info['size'] / 1024 / 1024
-    print(
-        f"Размер файла: {file_info['size']:,} байт "
-        f"({size_mb:.2f} МБ)"
-    )
-    print(f"Дата последнего изменения: {file_info['modified']}")
-
-    try:
-        tag = TinyTag.get(file_path)
-
-        if tag is None:
-            print("\nОшибка: Не удалось определить формат аудиофайла")
-            return
-
-        # Определяем формат по расширению
-        ext = Path(file_path).suffix.lower()
-        format_map = {
-            ".mp3": "MP3",
-            ".m4a": "M4A",
-            ".mp4": "MP4 (аудио)",
-            ".flac": "FLAC",
-            ".wav": "WAV",
-            ".ogg": "OGG",
-            ".wma": "WMA",
-            ".aac": "AAC",
-        }
-        format_name = format_map.get(ext, ext.upper().replace(".", ""))
-
-        print(f"\nФормат: {format_name}")
-
-        if tag.bitrate:
-            print(f"Битрейт: {tag.bitrate} kbps")
-        if tag.duration:
-            print(f"Длительность: {format_duration(tag.duration)}")
-
-        _print_audio_tags(tag)
-
-        # Детальная информация
-        print("\n--- Детальная информация ---")
-        if tag.channels:
-            print(f"Каналы: {tag.channels}")
-        if tag.samplerate:
-            print(f"Частота дискретизации: {tag.samplerate} Hz")
-        if tag.bitrate:
-            print(f"Битрейт: {tag.bitrate} kbps")
-        if tag.filesize:
-            print(f"Размер файла (из метаданных): {tag.filesize:,} байт")
-
-    except (IOError, OSError, ValueError, AttributeError) as e:
-        print(f"\nОшибка при анализе аудиофайла: {e}")
+    def __str__(self) -> str:
+        duration_str = f"{int(self.duration // 60)}:{int(self.duration % 60):02d}" if self.duration else "Неизвестно"
+        bitrate_str = f"{self.bitrate} kbps" if self.bitrate else "Неизвестно"
+        return (
+            f"Аудио: {self.name} | "
+            f"Длительность: {duration_str} | "
+            f"Битрейт: {bitrate_str} | "
+            f"Размер: {self.size / 1024 / 1024:.2f} МБ | "
+            f"Изменен: {self.modified}"
+        )
 
 
-def analyze_video(file_path):
-    """Анализирует видеофайл"""
-    print("\n" + "=" * 60)
-    print("АНАЛИЗ ВИДЕОФАЙЛА")
-    print("=" * 60)
+class VideoFile(MultimediaFile):
+    """Класс для видеофайлов"""
 
-    file_info = get_file_info(file_path)
-    print(f"Название файла: {file_info['name']}")
-    size_mb = file_info['size'] / 1024 / 1024
-    print(
-        f"Размер файла: {file_info['size']:,} байт "
-        f"({size_mb:.2f} МБ)"
-    )
-    print(f"Дата последнего изменения: {file_info['modified']}")
-
-    try:
-        # OpenCV для анализа видео
-        cap = cv2.VideoCapture(file_path)
-
-        if not cap.isOpened():
-            print("\nОшибка: Не удалось открыть видеофайл")
-            return
-
-        # Получаем свойства видео
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = frame_count / fps if fps > 0 else None
-
-        # Получаем кодек
-        fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
-        codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
-
-        print(f"\nРазрешение: {width} x {height}")
-        print(f"Частота кадров: {fps:.2f} fps")
-        if duration:
-            print(f"Длительность: {format_duration(duration)}")
-        print(f"Количество кадров: {frame_count:,}")
-        print(f"Кодек: {codec}")
-
-        # Доп информация
-        print("\n--- Дополнительная информация ---")
-        bitrate = cap.get(cv2.CAP_PROP_BITRATE)
-        if bitrate > 0:
-            print(f"Битрейт: {bitrate / 1000:.0f} kbps")
-
-        cap.release()
-
-    except (cv2.error, IOError, OSError, ValueError) as e:
-        print(f"\nОшибка при анализе видеофайла: {e}")
-
-
-def analyze_image(file_path):
-    """Анализирует изображение"""
-    print("\n" + "=" * 60)
-    print("АНАЛИЗ ИЗОБРАЖЕНИЯ")
-    print("=" * 60)
-
-    file_info = get_file_info(file_path)
-    print(f"Название файла: {file_info['name']}")
-    size_kb = file_info['size'] / 1024
-    print(
-        f"Размер файла: {file_info['size']:,} байт "
-        f"({size_kb:.2f} КБ)"
-    )
-    print(f"Дата последнего изменения: {file_info['modified']}")
-
-    try:
-        with Image.open(file_path) as img:
-            width, height = img.size
-            format_name = img.format
-            mode = img.mode
-
-            print(f"\nФормат: {format_name}")
-            print(f"Разрешение: {width} x {height} пикселей")
-            print(f"Цветовой режим: {mode}")
-
-            # Доп информация
-            print("\n--- Дополнительная информация ---")
-            if hasattr(img, "info"):
-                if "dpi" in img.info:
-                    dpi = img.info["dpi"]
-                    if isinstance(dpi, tuple):
-                        print(f"DPI: {dpi[0]} x {dpi[1]}")
+    def __init__(self, file_path: str):
+        super().__init__(file_path)
+        if self.file_type != "video":
+            # Проверяем, может быть это MP4 с видео
+            if self.path.suffix.lower() == ".mp4":
+                try:
+                    cap = cv2.VideoCapture(self.file_path)
+                    if cap.isOpened():
+                        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        cap.release()
+                        if width > 0 and height > 0:
+                            self.file_type = "video"
+                        else:
+                            raise ValueError(f"Файл {file_path} не является видеофайлом")
                     else:
-                        print(f"DPI: {dpi}")
+                        raise ValueError(f"Файл {file_path} не является видеофайлом")
+                except:
+                    raise ValueError(f"Файл {file_path} не является видеофайлом")
+            else:
+                raise ValueError(f"Файл {file_path} не является видеофайлом")
+        
+        self._load_metadata()
 
-                if "compression" in img.info:
-                    print(f"Сжатие: {img.info['compression']}")
+    def _load_metadata(self):
+        """Загружает метаданные видеофайла"""
+        try:
+            cap = cv2.VideoCapture(self.file_path)
+            if not cap.isOpened():
+                raise ValueError("Не удалось открыть видеофайл")
+            
+            self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            self.duration = frame_count / self.fps if self.fps > 0 else None
+            self.frame_count = frame_count
+            
+            fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+            self.codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
+            
+            bitrate = cap.get(cv2.CAP_PROP_BITRATE)
+            self.bitrate = bitrate / 1000 if bitrate > 0 else None
+            
+            cap.release()
+        except Exception as e:
+            self.width = None
+            self.height = None
+            self.fps = None
+            self.duration = None
+            self.frame_count = None
+            self.codec = None
+            self.bitrate = None
 
-            # Информация о цвет каналах
-            if mode in ("RGB", "RGBA"):
-                channels = len(mode)
-                print(f"Количество каналов: {channels}")
+    def __str__(self) -> str:
+        resolution = f"{self.width}x{self.height}" if self.width and self.height else "Неизвестно"
+        fps_str = f"{self.fps:.2f} fps" if self.fps else "Неизвестно"
+        duration_str = f"{int(self.duration // 60)}:{int(self.duration % 60):02d}" if self.duration else "Неизвестно"
+        return (
+            f"Видео: {self.name} | "
+            f"Разрешение: {resolution} | "
+            f"Частота кадров: {fps_str} | "
+            f"Длительность: {duration_str} | "
+            f"Размер: {self.size / 1024 / 1024:.2f} МБ | "
+            f"Изменен: {self.modified}"
+        )
 
-    except (IOError, OSError, ValueError, AttributeError) as e:
-        print(f"\nОшибка при анализе изображения: {e}")
+
+class ImageFile(MultimediaFile):
+    """Класс для изображений"""
+
+    def __init__(self, file_path: str):
+        super().__init__(file_path)
+        if self.file_type != "image":
+            raise ValueError(f"Файл {file_path} не является изображением")
+        
+        self._load_metadata()
+
+    def _load_metadata(self):
+        """Загружает метаданные изображения"""
+        try:
+            with Image.open(self.file_path) as img:
+                self.width, self.height = img.size
+                self.format = img.format
+                self.mode = img.mode
+        except Exception as e:
+            self.width = None
+            self.height = None
+            self.format = None
+            self.mode = None
+
+    def __str__(self) -> str:
+        resolution = f"{self.width}x{self.height}" if self.width and self.height else "Неизвестно"
+        format_str = self.format if self.format else "Неизвестно"
+        return (
+            f"Изображение: {self.name} | "
+            f"Разрешение: {resolution} | "
+            f"Формат: {format_str} | "
+            f"Размер: {self.size / 1024:.2f} КБ | "
+            f"Изменен: {self.modified}"
+        )
 
 
-def detect_file_type(file_path):
-    """Определяет тип файла по расширению"""
-    path = Path(file_path)
-    ext = path.suffix.lower()
+class MultimediaContainer:
+    """Контейнер для хранения мультимедийных файлов"""
 
-    audio_extensions = {
-        ".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".wma", ".mp4"
-    }
-    video_extensions = {
-        ".mp4",
-        ".avi",
-        ".mkv",
-        ".mov",
-        ".wmv",
-        ".flv",
-        ".webm",
-        ".m4v",
-        ".mpg",
-        ".mpeg",
-    }
-    image_extensions = {
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".gif",
-        ".bmp",
-        ".tiff",
-        ".tif",
-        ".webp",
-        ".svg",
-    }
+    def __init__(self):
+        self.files: List[MultimediaFile] = []
 
-    if ext in audio_extensions:
-        # MP4 может быть и аудио, и видео - проверяем содержимое
-        if ext == ".mp4":
-            try:
-                # Пытаемся открыть как видео
-                cap = cv2.VideoCapture(file_path)
-                if cap.isOpened():
-                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    cap.release()
-                    if width > 0 and height > 0:
-                        return "video"
-            except (cv2.error, ValueError, AttributeError):
-                pass
-        return "audio"
-    if ext in video_extensions:
-        return "video"
-    if ext in image_extensions:
-        return "image"
-    return "unknown"
+    def add(self, file_path: str) -> bool:
+        """Добавляет файл в контейнер"""
+        try:
+            path = Path(file_path)
+            ext = path.suffix.lower()
+            
+            # Определяем тип файла
+            audio_ext = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".wma"}
+            video_ext = {".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg"}
+            image_ext = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif", ".webp"}
+            
+            if ext in audio_ext:
+                file_obj = AudioFile(file_path)
+            elif ext in video_ext or (ext == ".mp4" and self._is_video(file_path)):
+                file_obj = VideoFile(file_path)
+            elif ext in image_ext:
+                file_obj = ImageFile(file_path)
+            else:
+                print(f"Ошибка: Неподдерживаемый формат файла: {file_path}")
+                return False
+            
+            self.files.append(file_obj)
+            print(f"Добавлен: {file_obj.name}")
+            return True
+        except Exception as e:
+            print(f"Ошибка при добавлении файла {file_path}: {e}")
+            return False
+
+    def _is_video(self, file_path: str) -> bool:
+        """Проверяет, является ли MP4 файл видео"""
+        try:
+            cap = cv2.VideoCapture(file_path)
+            if cap.isOpened():
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.release()
+                return width > 0 and height > 0
+            return False
+        except:
+            return False
+
+    def remove(self, condition: str) -> int:
+        """Удаляет файлы по условию"""
+        removed_count = 0
+        condition_lower = condition.lower()
+        
+        # Парсим условие
+        # Примеры: "type == audio", "size > 1000000", "name contains test"
+        
+        if "type" in condition_lower:
+            # Условие по типу: "type == audio", "type == video", "type == image"
+            match = re.search(r'type\s*==\s*(\w+)', condition_lower)
+            if match:
+                target_type = match.group(1)
+                original_count = len(self.files)
+                self.files = [f for f in self.files if f.file_type != target_type]
+                removed_count = original_count - len(self.files)
+                return removed_count
+        
+        if "size" in condition_lower:
+            # Условие по размеру: "size > 1000000", "size < 5000000"
+            match = re.search(r'size\s*([><=]+)\s*(\d+)', condition_lower)
+            if match:
+                op = match.group(1)
+                size_val = int(match.group(2))
+                original_count = len(self.files)
+                
+                if ">" in op:
+                    self.files = [f for f in self.files if f.size <= size_val]
+                elif "<" in op:
+                    self.files = [f for f in self.files if f.size >= size_val]
+                elif "==" in op or "=" in op:
+                    self.files = [f for f in self.files if f.size != size_val]
+                
+                removed_count = original_count - len(self.files)
+                return removed_count
+        
+        if "name" in condition_lower and "contains" in condition_lower:
+            # Условие по имени: "name contains test"
+            match = re.search(r'name\s+contains\s+["\']?(\w+)["\']?', condition_lower)
+            if match:
+                search_str = match.group(1)
+                original_count = len(self.files)
+                self.files = [f for f in self.files if search_str.lower() not in f.name.lower()]
+                removed_count = original_count - len(self.files)
+                return removed_count
+        
+        # Если условие не распознано, пытаемся удалить по имени файла
+        if os.path.exists(condition):
+            original_count = len(self.files)
+            self.files = [f for f in self.files if f.file_path != condition]
+            removed_count = original_count - len(self.files)
+            return removed_count
+        
+        print(f"Ошибка: Не удалось распознать условие: {condition}")
+        return 0
+
+    def print_all(self):
+        """Выводит все файлы в контейнере"""
+        if not self.files:
+            print("Контейнер пуст")
+            return
+        
+        print(f"\n{'='*80}")
+        print(f"Содержимое контейнера (всего файлов: {len(self.files)})")
+        print(f"{'='*80}")
+        
+        for i, file_obj in enumerate(self.files, 1):
+            print(f"{i}. {file_obj}")
+        
+        print(f"{'='*80}\n")
+
+
+def process_commands(command_file: str):
+    """Обрабатывает команды из файла"""
+    container = MultimediaContainer()
+    
+    if not os.path.exists(command_file):
+        print(f"Ошибка: Файл с командами '{command_file}' не найден")
+        return
+    
+    with open(command_file, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    
+    for line_num, line in enumerate(lines, 1):
+        line = line.strip()
+        # Игнорируем пустые строки и комментарии
+        if not line or line.startswith('#'):
+            continue
+        
+        # Парсим команду
+        parts = line.split(None, 1)
+        if not parts:
+            continue
+        
+        command = parts[0].upper()
+        
+        # Обрабатываем только известные команды
+        if command == "ADD":
+            if len(parts) < 2:
+                print(f"Строка {line_num}: Ошибка - команда ADD требует аргумент")
+                continue
+            file_path = parts[1].strip()
+            container.add(file_path)
+        
+        elif command == "REM":
+            if len(parts) < 2:
+                print(f"Строка {line_num}: Ошибка - команда REM требует аргумент")
+                continue
+            condition = parts[1].strip()
+            removed = container.remove(condition)
+            print(f"Удалено файлов: {removed}")
+        
+        elif command == "PRINT":
+            container.print_all()
+        
+        # Игнорируем строки, которые не являются командами (комментарии, описания)
+        elif not any(cmd in line.upper() for cmd in ["ADD", "REM", "PRINT"]):
+            # Это не команда, просто пропускаем
+            continue
 
 
 def main():
     """Главная функция"""
     if len(sys.argv) < 2:
-        print("Использование: python multimedia_analyzer.py <путь_к_файлу>")
-        print("\nПримеры:")
-        print("  python multimedia_analyzer.py audio.mp3")
-        print("  python multimedia_analyzer.py video.mp4")
-        print("  python multimedia_analyzer.py image.jpg")
+        print("Использование: python multimedia_analyzer.py <файл_с_командами>")
+        print("\nПример файла с командами:")
+        print("  ADD audio.mp3")
+        print("  ADD video.mp4")
+        print("  ADD image.jpg")
+        print("  PRINT")
+        print("  REM type == audio")
+        print("  PRINT")
         sys.exit(1)
-
-    file_path = sys.argv[1]
-
-    if not os.path.exists(file_path):
-        print(f"Ошибка: Файл '{file_path}' не найден")
-        sys.exit(1)
-
-    file_type = detect_file_type(file_path)
-
-    if file_type == "audio":
-        analyze_audio(file_path)
-    elif file_type == "video":
-        analyze_video(file_path)
-    elif file_type == "image":
-        analyze_image(file_path)
-    else:
-        print("Ошибка: Неизвестный тип файла или формат не поддерживается")
-        print("Поддерживаемые форматы:")
-        print("  Аудио: MP3, WAV, FLAC, M4A, AAC, OGG, WMA")
-        print("  Видео: MP4, AVI, MKV, MOV, WMV, FLV, WEBM, M4V, MPG, MPEG")
-        print("  Изображения: JPG, JPEG, PNG, GIF, BMP, TIFF, WEBP")
-        sys.exit(1)
+    
+    command_file = sys.argv[1]
+    process_commands(command_file)
 
 
 if __name__ == "__main__":
